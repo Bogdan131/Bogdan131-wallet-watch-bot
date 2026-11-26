@@ -1,0 +1,8 @@
+**
+!requirements.txt
+!bot/
+!bot/**
+**/.env*
+**/__pycache__/
+**/*.py[cod]
+**/*.sqlite3*
