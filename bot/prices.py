@@ -13,6 +13,8 @@ _TOKEN_URL = "https://api.dexscreener.com/latest/dex/tokens/"
 _CACHE_SECONDS = 300
 _RETRY_DELAYS = (1.0, 2.0)
 _MAX_RETRY_WAIT = 5.0
+# Spam tokens sent to popular wallets often have tiny pools with fake prices.
+MIN_LIQUIDITY_USD = Decimal(10_000)
 
 
 def _usable_decimal(value: Decimal) -> bool:
@@ -70,6 +72,8 @@ def _best_price(payload: object, token: str) -> Decimal | None:
         usd_liquidity = (
             _positive_decimal(liquidity.get("usd")) if isinstance(liquidity, dict) else None
         ) or Decimal(0)
+        if usd_liquidity < MIN_LIQUIDITY_USD:
+            continue
         if usd_liquidity > best_liquidity:
             best_liquidity, best_price = usd_liquidity, price
     return best_price

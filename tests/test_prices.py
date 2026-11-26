@@ -59,6 +59,7 @@ def test_quote_token_price_uses_quote_per_base_ratio() -> None:
             "quoteToken": {"address": TOKEN},
             "priceUsd": "75.00",
             "priceNative": "0.25",
+            "liquidity": {"usd": 50000},
         }]})
 
     async def run() -> Decimal | None:
@@ -122,6 +123,7 @@ def test_temporary_failure_is_retried(status: int | None, monkeypatch: pytest.Mo
             "chainId": "bsc",
             "baseToken": {"address": TOKEN},
             "priceUsd": "4",
+            "liquidity": {"usd": 50000},
         }]})
 
     async def run() -> Decimal | None:
@@ -154,3 +156,23 @@ def test_long_retry_after_does_not_pause_scanner(monkeypatch: pytest.MonkeyPatch
 
     asyncio.run(run())
     assert calls == 1
+
+
+def test_pairs_below_minimum_liquidity_are_ignored() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"pairs": [{
+            "chainId": "bsc",
+            "baseToken": {"address": TOKEN},
+            "priceUsd": "1.00",
+            "liquidity": {"usd": 9999},
+        }, {
+            "chainId": "bsc",
+            "baseToken": {"address": TOKEN},
+            "priceUsd": "500",
+        }]})
+
+    async def run() -> Decimal | None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await DexPrices(client).price_usd(TOKEN)
+
+    assert asyncio.run(run()) is None

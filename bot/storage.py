@@ -142,6 +142,10 @@ class WalletStorage:
             deleted = db.execute("DELETE FROM watches WHERE user_id = ? AND id = ?", (user_id, watch_id))
             return deleted.rowcount == 1
 
+    def delete_user_watches(self, user_id: int) -> int:
+        with self._connect() as db:
+            return db.execute("DELETE FROM watches WHERE user_id = ?", (user_id,)).rowcount
+
     def set_minimum(self, user_id: int, watch_id: int, minimum_usd: Decimal) -> bool:
         with self._connect() as db:
             updated = db.execute(

@@ -34,6 +34,9 @@ On your first command, the bot uses Ukrainian for a Telegram language code begin
 - The bot reads new blocks in ranges of up to 500 and queries token `Transfer` logs separately for watched senders and recipients.
 - It loads token metadata through `eth_call` and caches it in SQLite. It calculates USD value using the DexScreener price, cached for five minutes. Transfers with unavailable prices are logged and skipped.
 - A built-in list labels known exchange counterparties. Transfers to listed exchange wallets can be identified as exchange deposits in alerts.
+- Prices come only from BSC pairs with at least $10,000 of liquidity. This skips spam tokens that are sent to popular wallets with fake prices.
+- Native BNB transfers are not tracked; only BEP-20 tokens, including WBNB.
+- If a user blocks the bot, their watches are removed.
 - Each user gets at most one alert for a given transaction hash and log index. SQLite also stores your watches, language and the last scanned block.
 - On a fresh database, scan progress starts at the current block. When the bot falls more than 2,000 blocks behind, it logs the gap and resumes from the current block.
 

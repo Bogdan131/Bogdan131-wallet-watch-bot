@@ -2,11 +2,11 @@ import asyncio
 import logging
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from aiogram import Bot
-from aiogram.exceptions import TelegramRetryAfter
+from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 from aiogram.methods import SendMessage
 
 from bot import service
@@ -160,3 +160,35 @@ def test_telegram_rate_limit_retries_without_redelivering(
     asyncio.run(check())
     assert storage.get_checkpoint() == 101
     assert [call.args[0] for call in bot.send_message.await_args_list] == [1, 2, 2]
+
+
+def test_blocked_user_watches_are_removed(tmp_path: Path) -> None:
+    storage, bot, _, _, monitor = _setup(tmp_path)
+    storage.set_checkpoint(100)
+    for user_id in (1, 2):
+        storage.ensure_language(user_id, "en")
+        storage.add_watch(user_id, WatchSpec(WALLET, "Wallet", Decimal(1000)))
+    bot.send_message.side_effect = [
+        TelegramForbiddenError(method=SendMessage(chat_id=1, text="Alert"), message="Blocked"),
+        None,
+    ]
+
+    asyncio.run(monitor.scan_once())
+
+    assert [watch.user_id for watch in storage.list_watches()] == [2]
+    assert bot.send_message.await_count == 2
+    assert storage.get_checkpoint() == 101
+
+
+def test_unexpected_scan_error_does_not_stop_monitor(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    *_, monitor = _setup(tmp_path)
+    monitor.scan_once = AsyncMock(side_effect=[ValueError("secret-url"), asyncio.CancelledError()])
+
+    with caplog.at_level(logging.ERROR), pytest.raises(asyncio.CancelledError):
+        asyncio.run(monitor.run(0))
+
+    assert monitor.scan_once.await_count == 2
+    assert "BSC scan failed: ValueError" in caplog.text
+    assert "secret-url" not in caplog.text

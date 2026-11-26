@@ -1,12 +1,14 @@
 import asyncio
 import logging
+import traceback
 from collections import defaultdict
 from collections.abc import Mapping
 from decimal import Decimal
+from pathlib import Path
 from time import monotonic
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
+from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import LinkPreviewOptions
 
 from .domain import (
@@ -50,6 +52,13 @@ class WalletMonitor:
                 await self.scan_once()
             except RpcError as error:
                 log.warning("BSC scan deferred: %s", error)
+            except Exception as error:
+                # Keep the bot alive; log only the error type and location, never its text.
+                frame = traceback.extract_tb(error.__traceback__)[-1]
+                log.error(
+                    "BSC scan failed: %s at %s:%s",
+                    type(error).__name__, Path(frame.filename).name, frame.lineno,
+                )
             await asyncio.sleep(max(0, interval - (monotonic() - started)))
 
     async def scan_once(self) -> None:
@@ -136,6 +145,9 @@ class WalletMonitor:
             await asyncio.to_thread(self._storage.release_delivery, *key)
             self._telegram_paused_until = monotonic() + error.retry_after
             return False
+        except TelegramForbiddenError:
+            removed = await asyncio.to_thread(self._storage.delete_user_watches, watch.user_id)
+            log.info("Removed %s watches of a user who blocked the bot", removed)
         except TelegramAPIError as error:
             # An uncertain response may mean Telegram has already accepted the message.
             log.warning("Could not confirm alert delivery for %s (%s)", transfer.tx_hash, type(error).__name__)
